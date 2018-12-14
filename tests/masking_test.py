@@ -36,4 +36,4 @@ class MaskingTest(jtu.JaxTestCase):
     x = np.arange(3) + 1
     x_padded, mask = pad_and_mask(x, (5,))
     ans = apply_masked(lambda x: np.max(np.cos(x)), (x_padded,), (mask,))
-    assert ans == 0.5403023
+    assert ans == 0.5403023, ans

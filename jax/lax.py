@@ -37,6 +37,7 @@ from .interpreters import partial_eval as pe
 from .interpreters import xla
 from .interpreters import ad
 from .interpreters import batching
+from .interpreters import masking
 from .util import curry, safe_zip, unzip2, prod
 from .tree_util import build_tree
 from .lib import xla_bridge
@@ -675,6 +676,7 @@ def unop(result_dtype, accepted_dtypes, name):
   dtype_rule = partial(unop_dtype_rule, result_dtype, accepted_dtypes, name)
   prim = standard_primitive(_attrgetter('shape'), dtype_rule, name)
   batching.defvectorized(prim)
+  masking.defvectorized(prim)
   return prim
 standard_unop = partial(unop, identity)
 _attrgetter = lambda name: lambda x, **kwargs: getattr(x, name)
@@ -951,6 +953,7 @@ ad.deflinear(
     convert_element_type_p,
     lambda t, new_dtype, old_dtype: [convert_element_type(t, old_dtype)])
 batching.defvectorized(convert_element_type_p)
+masking.defvectorized(convert_element_type_p)
 
 
 def bitcast_convert_type_shape_rule(operand, new_dtype):
@@ -1857,7 +1860,7 @@ reduce_sum_p = standard_primitive(reduce_sum_shape_rule, _input_dtype,
                                   'reduce_sum', reduce_sum_translation_rule)
 ad.deflinear(reduce_sum_p, reduce_sum_transpose_rule)
 batching.defreducer(reduce_sum_p)
-
+masking.def_monoidal_reducer(reduce_sum_p, lambda dtype: onp.array(0, dtype))
 
 def reduce_chooser_shape_rule(operand, axes):
   return tuple(onp.delete(operand.shape, axes))
@@ -1884,7 +1887,7 @@ reduce_max_p = standard_primitive(reduce_chooser_shape_rule, _input_dtype,
                                   'reduce_max', reduce_max_translation_rule)
 ad.defjvp2(reduce_max_p, reduce_chooser_jvp_rule)
 batching.defreducer(reduce_max_p)
-
+masking.def_monoidal_reducer(reduce_max_p, _get_max_identity)
 
 reduce_min_translation_rule = partial(
     reduce_chooser_translation_rule, min_p, _get_min_identity)
@@ -1892,6 +1895,7 @@ reduce_min_p = standard_primitive(reduce_chooser_shape_rule, _input_dtype,
                                   'reduce_min', reduce_min_translation_rule)
 ad.defjvp2(reduce_min_p, reduce_chooser_jvp_rule)
 batching.defreducer(reduce_min_p)
+masking.def_monoidal_reducer(reduce_min_p, _get_min_identity)
 
 
 def reduce_window_shape_rule(operand, init_value, jaxpr, consts,

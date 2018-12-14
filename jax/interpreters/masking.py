@@ -23,8 +23,6 @@ from .. import core
 from ..core import Trace, Tracer, new_master
 from ..abstract_arrays import UnshapedArray, ShapedArray
 from ..linear_util import transformation, wrap_init
-import jax.lax as lax
-import jax.numpy as np
 import numpy as onp
 
 class MaskTracer(Tracer):
@@ -81,33 +79,32 @@ class MaskTrace(Trace):
 
 primitive_maskers = {}
 
+def defvectorized(prim):
+  primitive_maskers[prim] = partial(vectorized_masker, prim)
+
+def vectorized_masker(prim, args, masks, **params):
+  arg, = args
+  mask, = masks
+  return prim.bind(arg, **params), mask
+
+def def_monoidal_reducer(prim, mempty):
+  primitive_maskers[prim] = partial(monoidal_reducer_masker, prim, mempty)
+
+def monoidal_reducer_masker(prim, mempty, args, masks, axes, **kwargs):
+  import jax.numpy as np  # TODO: better solution for circular imports
+  import jax.lax as lax
+  arg, = args
+  mask, = masks
+  shape = arg.shape
+  masked_arg = lax.select(mask, arg, lax.broadcast(mempty(arg.dtype), shape))
+  mask_out = lax.reduce(mask, False, np.logical_or, axes)
+  return prim.bind(masked_arg, axes=axes, **kwargs), mask_out
+
 def get_primitive_masker(p):
   try:
     return primitive_maskers[p]
   except KeyError:
-    raise NotImplementedError("Masking rule for {} not yet implemented".format(p))
-
-def cos_mask_rule((x,), (mask,)):
-  return np.cos(x), mask
-
-def reduce_max_mask_rule((operand,), (mask,), axes):
-  shape = operand.shape
-  mzero = lax.broadcast(lax._get_max_identity(operand.dtype), shape)
-  masked_operand = lax.select(mask, operand, mzero)
-  val_out = lax._reduce_max(masked_operand, axes=axes)
-  mask_out = lax.reduce(mask, False, np.logical_or, axes)
-  return val_out, mask_out
-
-def convert_element_type_max_mask_rule((operand,), (mask,), new_dtype, old_dtype):
-  val_out = lax.convert_element_type(operand, new_dtype)
-  return val_out, mask
-
-
-primitive_maskers[lax.cos_p] = cos_mask_rule
-primitive_maskers[lax.reduce_max_p] = reduce_max_mask_rule
-
-primitive_maskers[lax.convert_element_type_p] = convert_element_type_max_mask_rule
-
+    raise NotImplementedError("Masking rule for {} not implemented".format(p))
 
 @transformation
 def mask_transform(vals, masks):
@@ -124,7 +121,8 @@ def apply_masked(f, xs, masks):
   return out_val
 
 def pad_to_shape(shape, x):
-  blank = np.zeros(shape, dtype=x.dtype)
+  import jax.lax as lax  # TODO: better solution for circular imports
+  blank = onp.zeros(shape, dtype=x.dtype)
   return lax.dynamic_update_slice(blank, x, (0,)*len(shape))
 
 def make_mask(shape, valid_shape):
@@ -143,6 +141,7 @@ def pad_and_mask(x, shape):
   return pad_to_shape(shape, x), make_mask(shape, x.shape)
 
 def pad_and_stack(xs):
+  import jax.numpy as np  # TODO: better solution for circular imports
   max_shape = tuple(map(max, zip(*(x.shape for x in xs))))
   masks = onp.stack([make_mask(max_shape, x.shape) for x in xs])
   xs_padded = np.stack([pad_to_shape(max_shape, x) for x in xs])
