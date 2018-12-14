@@ -138,6 +138,10 @@ def make_mask(shape, valid_shape):
     return onp.concatenate([onp.tile(suffix_mask, repeats),
                             onp.zeros((full - valid,) + full_rest, dtype=bool)])
 
+def pad_and_mask(x, shape):
+  assert len(x.shape) == len(shape)
+  return pad_to_shape(shape, x), make_mask(shape, x.shape)
+
 def pad_and_stack(xs):
   max_shape = tuple(map(max, zip(*(x.shape for x in xs))))
   masks = onp.stack([make_mask(max_shape, x.shape) for x in xs])
