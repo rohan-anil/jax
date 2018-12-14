@@ -279,12 +279,16 @@ def _get_max_identity(dtype):
     return onp.array(-onp.inf, dtype)
   elif onp.issubdtype(dtype, onp.integer):
     return onp.array(onp.iinfo(dtype).min, dtype)
+  else:
+    raise TypeError("No identity element for type: {}".format(dtype))
 
 def _get_min_identity(dtype):
   if onp.issubdtype(dtype, onp.floating):
     return onp.array(onp.inf, dtype)
   elif onp.issubdtype(dtype, onp.integer):
     return onp.array(onp.iinfo(dtype).max, dtype)
+  else:
+    raise TypeError("No identity element for type: {}".format(dtype))
 
 def _reduce_sum(operand, axes):
   return reduce_sum_p.bind(operand, axes=tuple(axes), input_shape=operand.shape)
