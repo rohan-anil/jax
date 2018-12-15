@@ -34,7 +34,7 @@ class MaskTracer(Tracer):
 
   @property
   def aval(self):
-    shape = (None,)*self.ndim  # TODO(dougalm): provide some shape information
+    shape = (None,) * self.ndim  # TODO(dougalm): provide some shape information
     return ShapedArray(shape, self.val.dtype)
 
   def unpack(self):
@@ -117,8 +117,8 @@ def mask_transform(vals, masks):
 
 def apply_masked(f, xs, masks):
   fun = wrap_init(f, {})
-  out_val, _ = mask_transform(fun).call_wrapped(xs, masks)
-  return out_val
+  out_val, mask = mask_transform(fun).call_wrapped(xs, masks)
+  return out_val, mask
 
 def pad_to_shape(shape, x):
   import jax.lax as lax  # TODO: better solution for circular imports
